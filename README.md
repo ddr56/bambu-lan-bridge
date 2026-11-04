@@ -40,6 +40,13 @@ Open the admin page at `http://<host>:8099/`. The password is in
 1. **Add each printer** — pick it from the discovered list, or enter its serial,
    model, real IP, a free **virtual IP**, and its **access code** (on the printer
    screen under the network/LAN settings).
+
+   > **Pick the virtual IP outside your router's DHCP range.** The proxy adds each
+   > virtual IP to the host as a static `/32` alias. If that address is inside the
+   > DHCP pool, the router may later hand it to another device and you'll get an IP
+   > clash (one of them drops off intermittently). Use an address on your LAN
+   > subnet that DHCP will never assign — either outside the pool, or reserved for
+   > the host in your router. One free address per printer.
 2. **Upload your certificate** — `key.pem`, `chain.pem` and (optional) `crl.pem`.
    One set covers all your printers. See below for how to get it.
 3. **Apply & restart.**

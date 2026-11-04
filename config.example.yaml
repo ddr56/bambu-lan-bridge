@@ -12,6 +12,6 @@ printers:
   - serial: 00M00A000000000      # your printer's serial, from its label
     name: My Printer
     model_code: O1D              # from the printer's SSDP: H2D O1D, H2C O1C2, P1S C12, X1C BL-P001 ...
-    virtual_ip: 192.168.1.60     # a free address on your LAN for the proxy to present this printer on
+    virtual_ip: 192.168.1.60     # a free LAN address OUTSIDE your router's DHCP range (avoids clashes)
     lan_ip: 192.168.1.50         # the printer's real IP
     access_code: "00000000"      # the printer's access code (printer screen); clients use it too

@@ -72,6 +72,61 @@ so those need your real app certificate.
 LAN-only by design. There is deliberately no Bambu cloud login, no cloud print,
 and no automatic certificate acquisition.
 
+## Tested printers
+
+So far this has only been verified against a **Bambu Lab H2D** and **H2C** (on
+their 2026 secured firmware). Other models are expected to work — the LAN
+protocol is the same — but are **untested**, so treat them as unverified:
+
+- **P-series / X-series / A-series (P1S, P1P, X1C, X1E, A1, A1 mini, …)** should
+  work with your own app certificate, but nobody has confirmed it yet.
+- Some models reportedly accept a **self-signed** certificate (no Bambu key
+  needed); others require the genuine app certificate. Which applies varies by
+  model and firmware.
+
+If you get it working — or not — on a model not listed here, a short issue or PR
+noting the model and firmware is very welcome.
+
+## Reporting a problem
+
+If it doesn't work with your printer (say a P1S that won't take commands), please
+open an issue with enough detail to reproduce it.
+
+**First, collect debug info:**
+
+1. On the admin page, open **Logs** and click **Enable debug logging** (it logs
+   the raw MQTT frames both ways and auto-reverts after 20 minutes).
+2. Reproduce the problem from your client.
+3. Click **Download diagnostics** — a JSON snapshot of versions, each printer's
+   state, recent commands and the log tail. **Access codes are redacted**, but
+   skim it before posting anyway.
+
+**Please include in the issue:**
+
+- **Printer model and firmware version** (e.g. P1S, firmware `01.08.xx`).
+- **Which client** and version (Bambu Studio, OrcaSlicer, Bambuddy, Home
+  Assistant, …), and **what you did** — the action you expected to work.
+- **What happened** vs. what you expected, and any error shown in the client.
+- Whether the printer is **reachable on the LAN** (can the host `ping` its
+  `lan_ip`?) and whether the **access code** is correct.
+- From the logs / diagnostics:
+  - Did **`app_cert_install via lan`** report **SUCCESS**?
+  - The line for your command — is it **signed**, and what did the printer
+    **answer** (`result` / `err_code`)?
+  - Any Bambu error code, which narrows it down a lot:
+
+    | Code | Meaning |
+    |------|---------|
+    | `84033543` | no/invalid signature, or the app certificate isn't trusted yet |
+    | `84033545` | the printer doesn't trust the app certificate (`app_cert_install` failed, or the printer rebooted since) |
+    | `84033547` | certificate not acceptable — not a genuine Bambu chain (a self-signed cert lands here on secured firmware) |
+    | `84033548` | the signature doesn't verify — the key doesn't match the certificate |
+
+- Attach the **diagnostics JSON**, or at least the relevant debug log lines.
+
+The single most useful thing is the debug log of one failing command together
+with the printer's answer.
+
 ## Legal
 
 This tool interoperates with printers **you own**, using an app certificate **you
@@ -82,4 +137,4 @@ unofficial clients. Use it on your own equipment and at your own risk.
 
 ## License
 
-TBD — not yet chosen. Do not redistribute until a license is added.
+[GNU AGPL-3.0](LICENSE).

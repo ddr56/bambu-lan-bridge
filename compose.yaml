@@ -1,0 +1,15 @@
+# One container on the host network. On start it puts each virtual IP on
+# LAN_INTERFACE as a /32 alias and removes them again on stop. Host networking
+# (not macvlan) so other containers on this host can reach the virtual printers.
+services:
+  proxy:
+    build: .
+    container_name: bambu-lan-bridge
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    volumes:
+      - ./data:/data
+    environment:
+      PROXY_INTERFACE: ${LAN_INTERFACE:-eth0}
+      PROXY_PREFIX: "32"

@@ -1,0 +1,4 @@
+paho-mqtt>=2.1
+cryptography>=44
+pyyaml>=6
+aiohttp>=3.9

@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bambu-lan-bridge</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2b3443; --text:#e6edf3;
+    --muted:#9aa7b4; --accent:#4ee3a2; --accent2:#6cc6ff; --warn:#e6a93c; --danger:#ff8686;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,Segoe UI,sans-serif; }
+  .wrap { width:min(980px,100%); margin:0 auto; padding:22px 16px 60px; }
+  h1 { font-size:22px; margin:0; letter-spacing:-.02em; }
+  h1 small { color:var(--muted); font-size:13px; font-weight:400; }
+  h2 { font-size:15px; margin:0 0 12px; color:var(--accent2); letter-spacing:.02em; }
+  .top { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .muted { color:var(--muted); } .mono { font-family:var(--mono); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  input,select { width:100%; min-height:40px; padding:0 11px; background:var(--panel2); color:var(--text);
+                 border:1px solid var(--border); border-radius:8px; font:inherit; }
+  input[type=file] { padding:8px; }
+  input[type=checkbox] { width:18px; height:18px; min-height:0; accent-color:var(--accent); }
+  button { min-height:40px; padding:0 15px; border:1px solid var(--border); border-radius:8px; background:var(--panel2);
+           color:var(--text); font:inherit; font-weight:600; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#04140c; border-color:transparent; }
+  button.danger { color:var(--danger); }
+  button.small { min-height:32px; padding:0 10px; font-size:13px; }
+  .pill { display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .pill.ok { background:rgba(78,227,162,.15); color:var(--accent); }
+  .pill.off { background:rgba(255,134,134,.15); color:var(--danger); }
+  .pill.warn { background:rgba(230,169,60,.16); color:var(--warn); }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--danger); }
+  .dot.on { background:var(--accent); }
+  .pcard { border:1px solid var(--border); border-radius:10px; padding:14px; background:var(--panel2); margin-bottom:10px; }
+  .pcard .hd { display:flex; align-items:center; gap:10px; justify-content:space-between; flex-wrap:wrap; }
+  .pcard .meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px 16px; margin-top:12px; }
+  .pcard .meta div span { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .pcard .meta div b { font-weight:600; font-size:13px; }
+  .detected { border:1px dashed var(--border); border-radius:10px; padding:11px 13px; margin-bottom:8px; display:flex;
+              justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .msg { margin-top:10px; font-size:13px; min-height:18px; }
+  .msg.ok { color:var(--accent); } .msg.err { color:var(--danger); } .msg.warn { color:var(--warn); }
+  #log { font-family:var(--mono); font-size:12px; background:#0a0e14; border:1px solid var(--border); border-radius:8px;
+         padding:11px; height:260px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+  .banner { background:rgba(230,169,60,.14); border:1px solid var(--warn); color:var(--warn); border-radius:10px;
+            padding:11px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .hide { display:none !important; }
+  a { color:var(--accent2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>bambu-lan-bridge <small id="version"></small></h1>
+    <div class="row">
+      <span id="uptime" class="muted" style="font-size:13px"></span>
+      <button class="small" onclick="loadAll()">Refresh</button>
+    </div>
+  </div>
+
+  <div id="restart-banner" class="banner hide">
+    <span>Configuration changed. Restart to apply.</span>
+    <button class="primary small" onclick="restart()">Apply &amp; restart</button>
+  </div>
+
+  <!-- PRINTERS -->
+  <div class="panel">
+    <h2>Printers</h2>
+    <div id="printers"></div>
+    <div id="detected-wrap" class="hide" style="margin-top:14px">
+      <div class="muted" style="font-size:12px; margin-bottom:6px">Found on your network</div>
+      <div id="detected"></div>
+    </div>
+  </div>
+
+  <!-- ADD / EDIT -->
+  <div class="panel">
+    <h2 id="form-title">Add a printer</h2>
+    <form id="pform" onsubmit="savePrinter(event)">
+      <input type="hidden" name="orig_serial">
+      <div class="grid">
+        <div><label>Name</label><input name="name" placeholder="Living room H2D"></div>
+        <div><label>Model</label><select name="model_code" id="model"></select></div>
+        <div><label>Serial</label><input name="serial" class="mono" placeholder="on the printer label" required></div>
+      </div>
+      <div class="grid" style="margin-top:10px">
+        <div><label>Printer IP (on your LAN)</label><input name="lan_ip" class="mono" placeholder="192.168.1.50"></div>
+        <div><label>Virtual IP (a free LAN address)</label><input name="virtual_ip" class="mono" placeholder="192.168.1.9" required></div>
+        <div><label>Access code (printer screen)</label><input name="access_code" class="mono" placeholder="8 characters"></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button type="submit" class="primary">Save printer</button>
+        <button type="button" onclick="resetForm()">Clear</button>
+      </div>
+      <div id="pform-msg" class="msg"></div>
+    </form>
+  </div>
+
+  <!-- CERTIFICATE -->
+  <div class="panel">
+    <h2>Signing certificate</h2>
+    <div id="cert-status" class="muted" style="font-size:13px; margin-bottom:12px">…</div>
+    <p class="muted" style="font-size:13px; margin-top:0">
+      Upload your own Bambu Studio app key set (<span class="mono">key.pem</span>, <span class="mono">chain.pem</span>,
+      and optionally <span class="mono">crl.pem</span>). One set signs for all your printers. Nothing is shipped with
+      this app — you obtain the files yourself from your own Bambu Studio install.
+    </p>
+    <form id="cform" onsubmit="uploadCerts(event)">
+      <div class="grid">
+        <div><label>key.pem</label><input type="file" name="key.pem" accept=".pem"></div>
+        <div><label>chain.pem</label><input type="file" name="chain.pem" accept=".pem"></div>
+        <div><label>crl.pem (optional)</label><input type="file" name="crl.pem" accept=".pem"></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button type="submit" class="primary">Upload</button></div>
+      <div id="cform-msg" class="msg"></div>
+    </form>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel">
+    <h2>Settings</h2>
+    <div class="grid">
+      <div><label>Mode</label>
+        <select id="s-mode"><option value="full">full (sign commands)</option>
+          <option value="read_only">read_only (never send)</option></select></div>
+      <div><label>&nbsp;</label><label class="row" style="gap:8px"><input type="checkbox" id="s-dev"> Present Developer Mode</label></div>
+      <div><label>&nbsp;</label><label class="row" style="gap:8px"><input type="checkbox" id="s-ssdp"> Announce on the network (SSDP)</label></div>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="primary" onclick="saveSettings()">Save settings</button></div>
+    <div id="s-msg" class="msg"></div>
+  </div>
+
+  <!-- LOGS -->
+  <div class="panel">
+    <h2>Logs</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="debug-btn" class="small" onclick="toggleDebug()">Enable debug logging</button>
+      <a class="small" href="/api/diagnostics"><button type="button" class="small">Download diagnostics</button></a>
+    </div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+const MODELS = {"O1D":"H2D","O1C2":"H2C","O1S":"H2S","O2D":"H2D Pro","N7":"P2S","C11":"P1P","C12":"P1S",
+  "N2S":"A1","N1":"A1 mini","BL-P001":"X1C","BL-P002":"X1","C13":"X1E"};
+const $ = s => document.querySelector(s);
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let logAfter = 0, debugOn = false;
+
+function fillModels() {
+  $("#model").innerHTML = '<option value="">—</option>' +
+    Object.entries(MODELS).map(([c,n])=>`<option value="${c}">${n} (${c})</option>`).join("");
+}
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error((await r.text()) || r.status);
+  return r.headers.get("content-type")?.includes("json") ? r.json() : r.text();
+}
+
+async function loadAll() {
+  try {
+    const s = await api("/api/status");
+    $("#version").textContent = "v" + s.version;
+    $("#uptime").textContent = "up " + fmtDur(s.uptime_s);
+    $("#restart-banner").classList.toggle("hide", !s.restart_needed);
+    renderCert(s.cert);
+    renderPrinters(s.printers, s.detected);
+    debugOn = s.debug.on;
+    $("#debug-btn").textContent = debugOn ? "Disable debug logging" : "Enable debug logging";
+  } catch (e) { console.error(e); }
+}
+
+function fmtDur(sec){ const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60); return h?`${h}h ${m}m`:`${m}m`; }
+
+function renderCert(c) {
+  const el = $("#cert-status");
+  if (!c || !c.present) { el.innerHTML = '<span class="pill warn">No certificate</span> Signing is off until you upload one.'; return; }
+  if (c.error) { el.innerHTML = `<span class="pill off">Problem</span> ${esc(c.error)}`; return; }
+  const low = c.days_left < 30;
+  el.innerHTML = `<span class="pill ok">Loaded</span> <span class="mono">${esc(c.cert_id?.slice(0,32)||"")}…</span> · `
+    + `<span class="${low?'pill warn':''}">${c.days_left} days left</span> (until ${esc(c.not_after?.slice(0,10))})`;
+}
+
+function renderPrinters(printers, detected) {
+  const box = $("#printers");
+  if (!printers.length) box.innerHTML = '<p class="muted">No printers yet. Add one below, or pick one found on your network.</p>';
+  else box.innerHTML = printers.map(p => {
+    const lan = p.lan || {}, conn = lan.connected;
+    const certOk = (p.cert_installed||{}).lan;
+    return `<div class="pcard">
+      <div class="hd">
+        <div class="row"><span class="dot ${conn?'on':''}"></span>
+          <b>${esc(p.name||p.serial)}</b> <span class="muted">${esc(p.model||"")}</span></div>
+        <div class="row">
+          <button class="small" onclick='editPrinter(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Edit</button>
+          <button class="small danger" onclick="delPrinter('${esc(p.serial)}')">Remove</button>
+        </div>
+      </div>
+      <div class="meta">
+        <div><span>Serial</span><b class="mono">${esc(p.serial)}</b></div>
+        <div><span>Printer IP → Virtual IP</span><b class="mono">${esc(p.lan_ip||"—")} → ${esc(p.virtual_ip)}</b></div>
+        <div><span>Connection</span><b>${conn?'connected':(p.lan_ip?'offline':'no IP set')}</b></div>
+        <div><span>Signing</span><b>${p.mode==='read_only'?'read-only':(certOk?'trusted':'pending')}</b></div>
+        <div><span>Firmware</span><b class="mono">${esc(p.firmware||"—")}</b></div>
+        <div><span>State</span><b>${esc(p.state||"—")}</b></div>
+      </div></div>`;
+  }).join("");
+
+  const unconfigured = (detected||[]).filter(d => !d.configured);
+  $("#detected-wrap").classList.toggle("hide", !unconfigured.length);
+  $("#detected").innerHTML = unconfigured.map(d => `<div class="detected">
+    <div><b>${esc(d.serial)}</b> <span class="muted">${esc(d.model||d.model_code||"")} · ${esc(d.ip||"")} · fw ${esc(d.firmware||"?")}</span></div>
+    <button class="small" onclick='useDetected(${JSON.stringify(d).replace(/'/g,"&#39;")})'>Add</button></div>`).join("");
+}
+
+function useDetected(d) {
+  resetForm();
+  const f = $("#pform");
+  f.serial.value = d.serial || "";
+  f.lan_ip.value = d.ip || "";
+  f.model_code.value = d.model_code || "";
+  f.name.value = (MODELS[d.model_code]||"") + " " + (d.serial||"").slice(-4);
+  f.virtual_ip.focus();
+  $("#form-title").textContent = "Add " + (d.serial||"");
+}
+
+function editPrinter(p) {
+  resetForm();
+  const f = $("#pform");
+  f.orig_serial.value = p.serial;
+  f.serial.value = p.serial; f.name.value = p.name||""; f.model_code.value = p.model_code||"";
+  f.lan_ip.value = p.lan_ip||""; f.virtual_ip.value = p.virtual_ip||"";
+  f.access_code.placeholder = "unchanged — leave blank to keep";
+  $("#form-title").textContent = "Edit " + (p.name||p.serial);
+  window.scrollTo({top:$("#pform").offsetTop-80, behavior:"smooth"});
+}
+
+function resetForm() {
+  $("#pform").reset(); $("#pform").orig_serial.value = ""; $("#pform-msg").textContent = "";
+  $("#pform").access_code.placeholder = "8 characters";
+  $("#form-title").textContent = "Add a printer";
+}
+
+async function savePrinter(e) {
+  e.preventDefault();
+  const f = e.target, body = {};
+  for (const k of ["serial","name","model_code","lan_ip","virtual_ip","access_code"]) body[k] = f[k].value.trim();
+  const msg = $("#pform-msg");
+  try {
+    const r = await api("/api/printers", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    msg.className = "msg " + (r.warning ? "warn" : "ok");
+    msg.textContent = r.warning || "Saved. Restart to apply.";
+    resetForm(); loadAll();
+  } catch (err) { msg.className = "msg err"; msg.textContent = err.message; }
+}
+
+async function delPrinter(serial) {
+  if (!confirm("Remove " + serial + "?")) return;
+  try { await api("/api/printers/" + encodeURIComponent(serial), {method:"DELETE"}); loadAll(); }
+  catch (err) { alert(err.message); }
+}
+
+async function uploadCerts(e) {
+  e.preventDefault();
+  const fd = new FormData();
+  for (const name of ["key.pem","chain.pem","crl.pem"]) {
+    const input = e.target[name];
+    if (input.files[0]) fd.append(name, input.files[0], name);
+  }
+  const msg = $("#cform-msg");
+  try {
+    const c = await api("/api/certs", {method:"POST", body:fd});
+    msg.className = "msg ok"; msg.textContent = "Certificate accepted (" + c.days_left + " days left).";
+    e.target.reset(); loadAll();
+  } catch (err) { msg.className = "msg err"; msg.textContent = err.message; }
+}
+
+async function loadSettings() {
+  try {
+    const s = await api("/api/settings");
+    $("#s-mode").value = s.values.mode;
+    $("#s-dev").checked = !!s.values.present_developer_mode;
+    $("#s-ssdp").checked = !!s.values.ssdp;
+  } catch (e) { console.error(e); }
+}
+
+async function saveSettings() {
+  const body = {mode:$("#s-mode").value, present_developer_mode:$("#s-dev").checked, ssdp:$("#s-ssdp").checked};
+  const msg = $("#s-msg");
+  try { await api("/api/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    msg.className = "msg ok"; msg.textContent = "Saved. Restart to apply."; loadAll(); }
+  catch (err) { msg.className = "msg err"; msg.textContent = err.message; }
+}
+
+async function toggleDebug() {
+  try { const r = await api("/api/debug", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({on:!debugOn})});
+    debugOn = r.on; $("#debug-btn").textContent = debugOn ? "Disable debug logging" : "Enable debug logging"; }
+  catch (err) { alert(err.message); }
+}
+
+async function restart() {
+  try { await api("/api/restart", {method:"POST"}); $("#restart-banner").innerHTML = "<span>Restarting…</span>"; }
+  catch (err) { alert(err.message); }
+}
+
+async function pollLogs() {
+  try {
+    const lines = await api("/api/logs?after=" + logAfter);
+    if (lines.length) {
+      logAfter = lines[lines.length-1].n;
+      const el = $("#log"), atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+      el.textContent += lines.map(l => l.line).join("\n") + "\n";
+      if (atEnd) el.scrollTop = el.scrollHeight;
+    }
+  } catch (e) { /* keep polling */ }
+}
+
+fillModels(); loadAll(); loadSettings();
+setInterval(loadAll, 5000);
+setInterval(pollLogs, 2000);
+pollLogs();
+</script>
+</body>
+</html>

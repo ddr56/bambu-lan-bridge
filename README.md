@@ -134,6 +134,12 @@ open an issue with enough detail to reproduce it.
 The single most useful thing is the debug log of one failing command together
 with the printer's answer.
 
+## Built with AI assistance
+
+This project was written with substantial AI assistance (Claude). It works
+against the author's own hardware (see **Tested printers**), but review the code
+yourself before trusting it on your equipment.
+
 ## Legal
 
 This tool interoperates with printers **you own**, using an app certificate **you

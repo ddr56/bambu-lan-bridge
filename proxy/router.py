@@ -46,6 +46,22 @@ def _clear_fun_bit(m: "re.Match") -> bytes:
     return m.group(1) + str(n).encode()
 
 
+# Some firmware (e.g. A1 mini, fw 01.08) reports an empty `fun` and signals the
+# secured/authorization-control state through `flag3` bit 16 (0x10000) instead
+# (ha-bambulab #2135 / PR #2182). On printers that report `fun` (e.g. H2) that
+# same bit means something else, so we only touch it when `fun` isn't the
+# authoritative signal.
+_FLAG3_RE = re.compile(rb'("flag3"\s*:\s*)(?:"([0-9A-Fa-f]+)"|(\d+))')
+
+
+def _clear_flag3_bit(m: "re.Match") -> bytes:
+    if m.group(2) is not None:  # "flag3":"<hex>"
+        n = int(m.group(2), 16) & ~0x10000
+        return m.group(1) + b'"' + format(n, "X").encode() + b'"'
+    n = int(m.group(3)) & ~0x10000   # "flag3":<decimal>
+    return m.group(1) + str(n).encode()
+
+
 def is_read_only(frame: dict) -> bool:
     for section, body in frame.items():
         if section == "header":
@@ -154,13 +170,21 @@ class Router:
         needs. Clears the "developer mode off" bit (0x20000000) in the printer's `fun`
         field (a hex string on H2, else a decimal number), and drops the "MQTT verify
         failed" HMS (0500050000010007) which a client would otherwise latch into
-        "must encrypt" even though we present developer mode."""
+        "must encrypt" even though we present developer mode.
+
+        Some firmware (e.g. A1 mini, fw 01.08) leaves `fun` empty and signals the
+        secured state through `flag3` bit 16 instead, so when `fun` isn't the
+        authoritative signal we clear that bit too. `fun` stays authoritative when
+        present, leaving `flag3` untouched on printers (e.g. H2) that report it."""
         if not self.dev_mode_present:
             return payload
         if b'"hms"' in payload and b"65543" in payload:
             payload = self._drop_verify_hms(payload)
-        if b'"fun"' in payload:
+        fun_authoritative = b'"fun"' in payload and _FUN_RE.search(payload) is not None
+        if fun_authoritative:
             payload = _FUN_RE.sub(_clear_fun_bit, payload)
+        elif b'"flag3"' in payload:
+            payload = _FLAG3_RE.sub(_clear_flag3_bit, payload)
         return payload
 
     def _drop_verify_hms(self, payload: bytes) -> bytes:
